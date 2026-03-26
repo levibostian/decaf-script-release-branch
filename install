@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO="levibostian/decaf-script-github-releases"
+BINARY_NAME="decaf-script-github-releases"
+
+echo "Fetching latest release version from GitHub..."
+LATEST=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+
+# Detect platform
+OS=$(uname -s)
+ARCH=$(uname -m)
+
+# Map to binary naming convention
+PLATFORM="$OS"
+ARCH_NAME="$ARCH"
+BINARY_FILE="bin-${ARCH_NAME}-${PLATFORM}"
+
+# Allow optional version argument
+VERSION="${1:-$LATEST}"
+
+echo "Installing version: $VERSION - $OS - $ARCH..."
+
+# Download release binary for the specified version
+DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/$BINARY_FILE"
+DEST="./$BINARY_NAME"
+
+if ! curl -fsSL "$DOWNLOAD_URL" -o "$DEST"; then
+    echo "\nNo binary found for OS '$OS' and architecture '$ARCH'." >&2
+    echo "If you believe this is a mistake, please check your release assets or open an issue." >&2
+    exit 1
+fi
+chmod +x "$DEST"
+
+echo "Install complete! Run the tool with:"
+echo "  ./decaf-script-github-releases [args]"
