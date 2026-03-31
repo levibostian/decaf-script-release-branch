@@ -1,32 +1,54 @@
-# decaf Script - GitHub Releases
+# decaf Script - Release Branch
 
-A script specifically designed for the [decaf](https://github.com/levibostian/decaf) deployment automation tool. This script helps you work with GitHub Releases in your continuous deployment workflows.
+A script specifically designed for the [decaf](https://github.com/levibostian/decaf) deployment automation tool. This script helps you manage releases on a dedicated "release branch" — keeping your main development branch clean from release metadata commits.
 
-**Important**: This is exclusively for use with decaf. You must use decaf to utilize this script - it's not a standalone tool for general use.
+> [!NOTE]  
+> This is exclusively for use with decaf. You must use decaf to utilize this script — it's not a standalone tool for general use.
+
+> [!IMPORTANT]  
+> This script only works with decaf version [0.13.0](https://github.com/levibostian/decaf/releases/tag/0.13.0) or later.
 
 ## What does this script do?
 
-If you use GitHub's Releases feature to store and track the versions that you deploy, this script is for you. When you run decaf and need to specify where to determine successful releases, this script provides that functionality.
+If creating a git tag or GitHub Release is part of your deployment process, you may decide to create these tags on a separate branch (e.g. `latest`, `release`) rather than directly on your development branch (e.g. `main`). This script makes that workflow easy.
 
-This script provides functionality to:
+It provides two commands:
 
-1. **Get the latest release** - Finds the most recent GitHub Release that matches a git tag on the current branch
-2. **Set/create a release** - Creates a new GitHub Release with configurable options
+1. **`get`** — Finds the most recent commit that exists on *both* the current branch (that decaf is running a deployment on) and your configured release branch. Since decaf requires that you find the latest commit on the current branch that corresponds to the latest release, this script helps you find that commit even when your releases are on a different branch.
 
-# Getting Started
+2. **`set` / `push`** — Checks out the release branch, merges the current branch into it, optionally stages and commits a list of files you specify, pushes, and returns the new HEAD commit SHA on the release branch. Useful to run during the decaf deploy step to make your git tag or GitHub Release on the release branch instead of the current branch.
 
-**No installation required!** We just need to tell decaf how to run this script (via `npx`, `deno`, or a compiled binary).
+### Why use a separate release branch?
 
-Here are some simple examples for how to run this script with decaf on GitHub Actions or from the command line.
+Some languages/frameworks require that release metadata (e.g. version number) be committed to the repository. Some people may consider these commits to be "noise" on their main development branch or the commits may cause  development annoyance (e.g. merge conflicts). By making those commits on a separate release branch, you can keep your main development branch clean and focused on development work. 
+
+Keeping in mind, some languages like node may not require that you commit release metadata to the repository at all. For node projects, it's common to update your metadata (`package.json`) and then you push all of your code to a npm server. Once deployed, you do not need to commit. You can simply make a git tag on the latest commit on your development branch and move on. So, for languages like this, this script may not be necessary.
+
+## Getting Started
+
+It's important to note that *this script requires that it runs after another script that already found the latest release*. So let's say that your single source of truth for releases is GitHub Releases. You would first run a script that finds the latest GitHub Release ([such as this one](https://github.com/levibostian/decaf-script-github-releases)) and then you run this script by passing the version name and commit SHA from that prior script as command-line arguments.
 
 **GitHub Actions Example**
+
+Here is an example if your release branch is named `latest` and you are using GitHub Releases as your single source of truth for releases:
 
 ```yaml
 - uses: levibostian/decaf
   with:
-    get_latest_release_current_branch: npx @levibostian/decaf-script-github-releases get
-    deploy: your-script-here && npx @levibostian/decaf-script-github-releases set
-    # Other decaf arguments...
+    # First get the latest release from GitHub Releases.
+    # Then run this script, passing the version name and commit SHA from the previous script as arguments.
+    get_latest_release_current_branch: |
+      npx @levibostian/decaf-script-github-releases get
+      npx @levibostian/decaf-script-release-branch get \
+        --release-branch latest \
+        --version-name "{{ versionName }}"
+    # For deployment, update the metadata file with the new version, then run this script to merge and push to the release branch.
+    deploy: |
+      echo "{{ nextVersionName }}" > version.txt
+      npx @levibostian/decaf-script-release-branch set \
+        --release-branch latest \
+        --files version.txt \
+        --commit-message "chore: bump version to {{ nextVersionName }}"
 ```
 
 **Command Line Example**
@@ -34,86 +56,114 @@ Here are some simple examples for how to run this script with decaf on GitHub Ac
 ```bash
 decaf \
   --get-latest-release-current-branch "npx @levibostian/decaf-script-github-releases get" \
-  --deploy "your-script-here && npx @levibostian/decaf-script-github-releases set"
+  --get-latest-release-current-branch "npx @levibostian/decaf-script-release-branch get --release-branch latest --version-name '{{ versionName }}'" \
+  --deploy "echo '{{ nextVersionName }}' > version.txt" \
+  --deploy "npx @levibostian/decaf-script-release-branch set --release-branch latest --files version.txt --commit-message 'chore: bump version to {{ nextVersionName }}'"
 ```
 
-> Note: Replace `your-script-here` with whatever commands you need to run as part of the deployment process before creating the release. Be sure to run the script *last* because once you create the release, decaf will consider the deployment successful and if you re-run decaf, it will not attempt to re-attempt the deployment.
+> [Learn more about decaf's behavior of running multiple scripts for the same deployment step](https://github.com/levibostian/decaf#running-multiple-commands-per-step).
 
 ### Alternative Installation Methods
 
-The above examples use `npx` and are arguably the easiest way to run the script. But, you have a few other options too: 
+The examples above use `npx` to run the script. Using `npx` is convenient because node is commonly pre-installed on CI environments. However, you can run the script in other ways as well. 
 
 1. **Run with Deno** (requires Deno installed)
 
 ```yaml
-get_latest_release_current_branch: deno run --allow-all --quiet jsr:@levibostian/decaf-script-github-releases get
-deploy: deno run --allow-all --quiet jsr:@levibostian/decaf-script-github-releases set
+get_latest_release_current_branch: deno run --allow-all --quiet jsr:@levibostian/decaf-script-release-branch get --release-branch latest --version-name "{{ versionName }}"
+deploy: deno run --allow-all --quiet jsr:@levibostian/decaf-script-release-branch set --release-branch latest --files version.txt --commit-message "chore: bump version to {{ nextVersionName }}"
 ```
 
 2. **Run as a compiled binary**
 
-Great option that doesn't depend on node or deno. This just installs a binary from GitHub and runs it for your operating system.
-
 ```yaml
-get_latest_release_current_branch: curl -fsSL https://github.com/levibostian/decaf-script-github-releases/blob/HEAD/install?raw=true | bash -s "0.1.0" && ./decaf-script-github-releases get
-deploy: curl -fsSL https://github.com/levibostian/decaf-script-github-releases/blob/HEAD/install?raw=true | bash -s "0.1.0" && ./decaf-script-github-releases set
-
-# Or, always run the latest version (less stable, but always up-to-date)
-get_latest_release_current_branch: curl -fsSL https://github.com/levibostian/decaf-script-github-releases/blob/HEAD/install?raw=true | bash && ./decaf-script-github-releases get
+get_latest_release_current_branch: |
+  curl -fsSL https://github.com/levibostian/decaf-script-release-branch/blob/HEAD/install?raw=true | bash -s "0.1.0"
+  ./decaf-script-release-branch get --release-branch latest --version-name "{{ versionName }}"
+deploy: |
+  ./decaf-script-release-branch set --release-branch latest --files version.txt --commit-message "chore: bump version to {{ nextVersionName }}"
 ```
 
 # Commands
 
-### Get Latest Release
+### `get` — Find the common commit
 
-In your *get latest release* script for decaf, use the `get` (or `get-latest-release`) command to fetch the latest GitHub Release for the current branch. 
+Used in your *get latest release* step. Finds the most recent commit shared between the current branch and the release branch. The version name of the previous release is passed in as a `--version-name` argument (typically output from a prior script such as one that reads GitHub Releases).
 
-If your GitHub repository...
-- ...has a newer git tag then the latest release, this script will return the release, not the tag. 
-- ...has no releases, it will return nothing, indicating that there is no latest release. 
-- ...has newer GitHub Releases then the current branch's latest git tag, it will return the older GitHub Release that matches the latest git tag on the current branch.
-
-Example usage:
-
-```bash 
-npx @levibostian/decaf-script-github-releases get
-```
-
-### Set/Create Release
-
-In your *deploy* script for decaf, use the `set` (or `set-latest-release`) command to create a new GitHub Release for the current branch.
-
-When you run this command, it will:
-- Create a new GitHub Release using the new version determined by the decaf get next release version script 
-- Upload any assets that you created if you called the `set-assets` command beforehand
-
-Example usage:
+**Exits with error (code 1)** if no common commit is found between the two branches — this indicates a broken repository state.
 
 ```bash
-# Use the default settings to create the release
-npx @levibostian/decaf-script-github-releases set
+# With a previous release
+npx @levibostian/decaf-script-release-branch get \
+  --release-branch latest \
+  --version-name "1.2.3"
 
-# Or, with custom GitHub CLI arguments
-npx @levibostian/decaf-script-github-releases set --draft --target {{gitCurrentBranch}}
+# With a different release branch name
+npx @levibostian/decaf-script-release-branch get \
+  --release-branch releases \
+  --version-name "2.0.0"
 ```
 
-### Set GitHub Release Assets
+**Options**
 
-In your *deploy* script for decaf, use the `set-assets` (or `set-github-release-assets`) command to specify files that should be uploaded when creating a GitHub Release (when you call `set` command).
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--release-branch` | Yes | The name of the branch where releases live |
+| `--version-name` | No | Version name of the previous release (e.g. `1.2.3`). If omitted, the script assumes no prior release exists and exits 0. |
 
-This command allows you to:
-- Specify multiple files to upload as release assets
-- Set custom display names for each asset
+**Output**: `GetLatestReleaseStepOutput { versionName, commitSha }` — `versionName` is passed through from `--version-name`; `commitSha` is the most recent commit shared between both branches.
 
-Example usage:
+---
+
+### `set` / `push` — Push to the release branch
+
+Used in your *deploy* step. Checks out the release branch, merges the current branch into it, optionally stages and commits files, and pushes. Returns the new HEAD commit SHA on the release branch.
+
+`--files` and `--commit-message` are both optional. If omitted, no commit is made — but the merge and push still happen, which is useful when another part of your pipeline handles the file changes.
+
+**If you do provide `--files`, you are responsible for writing those files before calling this command.** This script only stages, commits, and pushes them.
 
 ```bash
-# After your deployment script runs, set the assets to upload. 
-# Each asset follows the format: `"path/to/file#Display Name"`
-npx @levibostian/decaf-script-github-releases set-assets "dist/binary-linux#Linux Binary" "dist/binary-mac#Mac Binary"
+# Merge and push with no commit (just bring the release branch up to date)
+npx @levibostian/decaf-script-release-branch set --release-branch latest
+npx @levibostian/decaf-script-release-branch push --release-branch latest
 
-# Then create the release (it will automatically include the assets)
-npx @levibostian/decaf-script-github-releases set
+# Commit a single file
+npx @levibostian/decaf-script-release-branch set \
+  --release-branch latest \
+  --files version.txt \
+  --commit-message "chore: bump version to 1.2.3"
+
+# Commit multiple files (space-separated in one value)
+npx @levibostian/decaf-script-release-branch set \
+  --release-branch latest \
+  --files "version.txt metadata.json" \
+  --commit-message "chore: release 1.2.3"
+
+# Commit multiple files (repeated flag)
+npx @levibostian/decaf-script-release-branch set \
+  --release-branch latest \
+  --files version.txt \
+  --files metadata.json \
+  --commit-message "chore: release 1.2.3"
 ```
 
+**Options**
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--release-branch` | Yes | The name of the branch where releases live. |
+| `--files` | No | File path(s) to stage and commit. Space-separated or repeated. If omitted, no commit is made. |
+| `--commit-message` | No | The git commit message. If omitted, no commit is made. |
+
+**Output**: The SHA of the HEAD commit on the release branch after the push is printed to stdout.
+
+If a later script needs this SHA (e.g. to create a git tag or GitHub Release on the release branch), capture it from stdout and pass it as a command-line argument. For example:
+
+```txt
+... first, run the set/push command and capture the SHA:
+RELEASE_SHA=$(npx @levibostian/decaf-script-release-branch set --release-branch latest --files version.txt --commit-message "chore: bump version to {{ nextVersionName }}" | grep "Release branch commit SHA:" | awk '{print $NF}')
+... then pass it to the next script:
+npx @levibostian/decaf-script-github-releases create --tag {{ nextVersionName }} --target "$RELEASE_SHA" --name "Release {{ nextVersionName }}"
+```
 

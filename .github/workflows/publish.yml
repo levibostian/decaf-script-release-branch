@@ -26,12 +26,21 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
       - run: npm install -g npm@latest # required to get the latest OIDC support
       
-      - uses: levibostian/decaf@0.3.2
+      - uses: levibostian/decaf@0.12.1
         env:
           # required to use 'gh' CLI in my step scripts. 
           GH_TOKEN: ${{ github.token }}      
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          get_latest_release_current_branch: deno run --quiet --allow-all script.ts get-latest-release 
-          get_next_release_version: ./scripts/deployment-get-next-release.ts
-          deploy: ./scripts/deployment-deploy.ts
+          get_latest_release_current_branch: deno run --allow-all --quiet jsr:@levibostian/decaf-script-github-releases get
+          get_next_release_version: deno run --allow-all --quiet jsr:@levibostian/decaf-script-conventional-commits
+          deploy: |
+            deno run --allow-all --quiet jsr:@levibostian/decaf-script-jsr            
+            mkdir -p dist
+            deno compile --output dist/bin-x86_64-Linux --allow-all --target x86_64-unknown-linux-gnu script.ts
+            deno compile --output dist/bin-aarch64-Linux --allow-all --target aarch64-unknown-linux-gnu script.ts
+            deno compile --output dist/bin-x86_64-Darwin --allow-all --target x86_64-apple-darwin script.ts
+            deno compile --output dist/bin-aarch64-Darwin --allow-all --target aarch64-apple-darwin script.ts
+            deno run --quiet --allow-all jsr:@levibostian/decaf-script-github-releases set-github-release-assets dist/bin-x86_64-Linux#bin-x86_64-Linux dist/bin-aarch64-Linux#bin-aarch64-Linux dist/bin-x86_64-Darwin#bin-x86_64-Darwin dist/bin-aarch64-Darwin#bin-aarch64-Darwin
+            deno run --allow-all --quiet jsr:@levibostian/decaf-script-npm --package-path ./node
+            deno run --allow-all --quiet jsr:@levibostian/decaf-script-github-releases set

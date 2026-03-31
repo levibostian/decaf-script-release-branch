@@ -1,0 +1,311 @@
+export const snapshot = {};
+
+snapshot[`get: missing --release-branch exits 1 with error 1`] = `
+'Error: --release-branch is required
+
+Usage:
+  get --release-branch <branch> --version-name <name>
+  set --release-branch <branch> [--files <paths>] [--commit-message <msg>]
+
+Commands:
+  get          Find the most recent commit shared between the current branch and the
+               release branch. 
+
+  set | push   Check out the release branch, merge the current branch into it,
+               optionally commit file changes, push, and print the new HEAD commit
+               SHA on the release branch.
+
+Options:
+  --release-branch <branch>    (required) Name of the branch used for releases.
+  --version-name <name>        (get only) Version name of the previous release (e.g. "1.2.3").
+  --files <paths>              (set only, optional) Space-separated file paths to stage
+                               and commit. Can also be repeated:
+                                 --files file1.txt --files file2.txt
+                                 --files "file1.txt file2.txt"
+                               If omitted, no commit is made.
+  --commit-message <msg>       (set only, optional) Git commit message.
+                               If omitted, no commit is made.
+
+Examples:
+  script.ts get --release-branch latest
+  script.ts get --release-branch latest --version-name 1.2.3
+  script.ts get --release-branch releases --version-name v2.0.0
+
+  script.ts set --release-branch latest
+  script.ts push --release-branch latest
+  script.ts set --release-branch latest --files version.txt --commit-message "chore: bump version"
+  script.ts set --release-branch latest --files "dist/a.txt dist/b.txt" --commit-message "chore: release"
+  script.ts set --release-branch latest --files dist/a.txt --files dist/b.txt --commit-message "chore: release"
+'
+`;
+
+snapshot[`get: no --version-name from prior step → returns null, exits 0 1`] = `"Looks like none of the previous scripts found a latest release. That means there is nothing for me to do, since my job is to find the common commit between the current branch and the release branch."`;
+
+snapshot[`get: release branch has no commits → exits 1 with error 1`] = `
+"No commits found that are present on both 'latest' and current branch.
+This shouldn't happen, so exiting early with error to avoid creating a broken release."
+`;
+
+snapshot[`get: common commit found → returns versionName from --version-name and correct commitSha 1`] = `
+"Found most recent common commit on both 'latest' and current branch: 
+    Initial commit (abc1)"
+`;
+
+snapshot[`get: no common commit between branches → exits 1 with error 1`] = `
+"No commits found that are present on both 'latest' and current branch.
+This shouldn't happen, so exiting early with error to avoid creating a broken release."
+`;
+
+snapshot[`get: no command given exits 1 with error 1`] = `
+'Error: a command is required (get, set, push)
+
+Usage:
+  get --release-branch <branch> --version-name <name>
+  set --release-branch <branch> [--files <paths>] [--commit-message <msg>]
+
+Commands:
+  get          Find the most recent commit shared between the current branch and the
+               release branch. 
+
+  set | push   Check out the release branch, merge the current branch into it,
+               optionally commit file changes, push, and print the new HEAD commit
+               SHA on the release branch.
+
+Options:
+  --release-branch <branch>    (required) Name of the branch used for releases.
+  --version-name <name>        (get only) Version name of the previous release (e.g. "1.2.3").
+  --files <paths>              (set only, optional) Space-separated file paths to stage
+                               and commit. Can also be repeated:
+                                 --files file1.txt --files file2.txt
+                                 --files "file1.txt file2.txt"
+                               If omitted, no commit is made.
+  --commit-message <msg>       (set only, optional) Git commit message.
+                               If omitted, no commit is made.
+
+Examples:
+  script.ts get --release-branch latest
+  script.ts get --release-branch latest --version-name 1.2.3
+  script.ts get --release-branch releases --version-name v2.0.0
+
+  script.ts set --release-branch latest
+  script.ts push --release-branch latest
+  script.ts set --release-branch latest --files version.txt --commit-message "chore: bump version"
+  script.ts set --release-branch latest --files "dist/a.txt dist/b.txt" --commit-message "chore: release"
+  script.ts set --release-branch latest --files dist/a.txt --files dist/b.txt --commit-message "chore: release"
+'
+`;
+
+snapshot[`set: missing --release-branch exits 1 with error 1`] = `
+'Error: --release-branch is required
+
+Usage:
+  get --release-branch <branch> --version-name <name>
+  set --release-branch <branch> [--files <paths>] [--commit-message <msg>]
+
+Commands:
+  get          Find the most recent commit shared between the current branch and the
+               release branch. 
+
+  set | push   Check out the release branch, merge the current branch into it,
+               optionally commit file changes, push, and print the new HEAD commit
+               SHA on the release branch.
+
+Options:
+  --release-branch <branch>    (required) Name of the branch used for releases.
+  --version-name <name>        (get only) Version name of the previous release (e.g. "1.2.3").
+  --files <paths>              (set only, optional) Space-separated file paths to stage
+                               and commit. Can also be repeated:
+                                 --files file1.txt --files file2.txt
+                                 --files "file1.txt file2.txt"
+                               If omitted, no commit is made.
+  --commit-message <msg>       (set only, optional) Git commit message.
+                               If omitted, no commit is made.
+
+Examples:
+  script.ts get --release-branch latest
+  script.ts get --release-branch latest --version-name 1.2.3
+  script.ts get --release-branch releases --version-name v2.0.0
+
+  script.ts set --release-branch latest
+  script.ts push --release-branch latest
+  script.ts set --release-branch latest --files version.txt --commit-message "chore: bump version"
+  script.ts set --release-branch latest --files "dist/a.txt dist/b.txt" --commit-message "chore: release"
+  script.ts set --release-branch latest --files dist/a.txt --files dist/b.txt --commit-message "chore: release"
+'
+`;
+
+snapshot[`push alias: missing --release-branch exits 1 with error 1`] = `
+'Error: --release-branch is required
+
+Usage:
+  get --release-branch <branch> --version-name <name>
+  set --release-branch <branch> [--files <paths>] [--commit-message <msg>]
+
+Commands:
+  get          Find the most recent commit shared between the current branch and the
+               release branch. 
+
+  set | push   Check out the release branch, merge the current branch into it,
+               optionally commit file changes, push, and print the new HEAD commit
+               SHA on the release branch.
+
+Options:
+  --release-branch <branch>    (required) Name of the branch used for releases.
+  --version-name <name>        (get only) Version name of the previous release (e.g. "1.2.3").
+  --files <paths>              (set only, optional) Space-separated file paths to stage
+                               and commit. Can also be repeated:
+                                 --files file1.txt --files file2.txt
+                                 --files "file1.txt file2.txt"
+                               If omitted, no commit is made.
+  --commit-message <msg>       (set only, optional) Git commit message.
+                               If omitted, no commit is made.
+
+Examples:
+  script.ts get --release-branch latest
+  script.ts get --release-branch latest --version-name 1.2.3
+  script.ts get --release-branch releases --version-name v2.0.0
+
+  script.ts set --release-branch latest
+  script.ts push --release-branch latest
+  script.ts set --release-branch latest --files version.txt --commit-message "chore: bump version"
+  script.ts set --release-branch latest --files "dist/a.txt dist/b.txt" --commit-message "chore: release"
+  script.ts set --release-branch latest --files dist/a.txt --files dist/b.txt --commit-message "chore: release"
+'
+`;
+
+snapshot[`set: merges and pushes to release branch, returns commit SHA 1`] = `
+"> git checkout latest
+git checkout latest (mocked)
+> git pull --no-rebase origin latest
+git pull --no-rebase origin latest (mocked)
+> git merge --ff main
+git merge --ff main (mocked)
+No files or commit message provided — skipping commit.
+Test mode is enabled — skipping git push.
+Release branch commit SHA: firedragon1234567890abcdef"
+`;
+
+snapshot[`set: with --files and --commit-message stages and commits them 1`] = `
+\`> git checkout latest
+git checkout latest (mocked)
+> git pull --no-rebase origin latest
+git pull --no-rebase origin latest (mocked)
+> git merge --ff main
+git merge --ff main (mocked)
+> git add 'version.txt' && git commit -m "'chore: bump version'"
+git add version.txt (mocked)
+git commit -m 'chore: bump version' (mocked)
+Showing the most recent commit to aid debugging:
+> git show HEAD
+git show HEAD (mocked)
+Test mode is enabled — skipping git push.
+Release branch commit SHA: cafe12345678\`
+`;
+
+snapshot[`set: only commit-message provided but no files → skips commit 1`] = `
+"> git checkout latest
+git checkout latest (mocked)
+> git pull --no-rebase origin latest
+git pull --no-rebase origin latest (mocked)
+> git merge --ff main
+git merge --ff main (mocked)
+No files or commit message provided — skipping commit.
+Test mode is enabled — skipping git push.
+Release branch commit SHA: aabb1122ccdd3344"
+`;
+
+snapshot[`set: multiple files via space-separated single --files arg 1`] = `
+\`> git checkout latest
+git checkout latest (mocked)
+> git pull --no-rebase origin latest
+git pull --no-rebase origin latest (mocked)
+> git merge --ff main
+git merge --ff main (mocked)
+> git add 'dist/a.txt dist/b.txt' && git commit -m "'chore: release'"
+git add dist/a.txt dist/b.txt (mocked)
+git commit -m 'chore: release' (mocked)
+Showing the most recent commit to aid debugging:
+> git show HEAD
+git show HEAD (mocked)
+Test mode is enabled — skipping git push.
+Release branch commit SHA: 11aabb22ccdd3344\`
+`;
+
+snapshot[`set: multiple files via repeated --files flag 1`] = `
+\`> git checkout latest
+git checkout latest (mocked)
+> git pull --no-rebase origin latest
+git pull --no-rebase origin latest (mocked)
+> git merge --ff main
+git merge --ff main (mocked)
+> git add 'dist/a.txt dist/b.txt' && git commit -m "'chore: release'"
+git add dist/a.txt dist/b.txt (mocked)
+git commit -m 'chore: release' (mocked)
+Showing the most recent commit to aid debugging:
+> git show HEAD
+git show HEAD (mocked)
+Test mode is enabled — skipping git push.
+Release branch commit SHA: cc11dd22ee334455\`
+`;
+
+snapshot[`set: git push runs when testMode is false 1`] = `
+"> git checkout latest
+git checkout latest (mocked)
+> git pull --no-rebase origin latest
+git pull --no-rebase origin latest (mocked)
+> git merge --ff main
+git merge --ff main (mocked)
+No files or commit message provided — skipping commit.
+> git push
+git push (mocked passthrough)
+Release branch commit SHA: 0011223344556677"
+`;
+
+snapshot[`get: multiple common commits on both branches → returns the most recent one (first in release branch list) 1`] = `
+"Found most recent common commit on both 'latest' and current branch: 
+    Second shared commit (shared2)"
+`;
+
+snapshot[`get: error message includes the release branch name 1`] = `
+"No commits found that are present on both 'my-custom-release' and current branch.
+This shouldn't happen, so exiting early with error to avoid creating a broken release."
+`;
+
+snapshot[`unknown command exits 1 with error message 1`] = `
+'Unknown command: bogus-command
+
+Usage:
+  get --release-branch <branch> --version-name <name>
+  set --release-branch <branch> [--files <paths>] [--commit-message <msg>]
+
+Commands:
+  get          Find the most recent commit shared between the current branch and the
+               release branch. 
+
+  set | push   Check out the release branch, merge the current branch into it,
+               optionally commit file changes, push, and print the new HEAD commit
+               SHA on the release branch.
+
+Options:
+  --release-branch <branch>    (required) Name of the branch used for releases.
+  --version-name <name>        (get only) Version name of the previous release (e.g. "1.2.3").
+  --files <paths>              (set only, optional) Space-separated file paths to stage
+                               and commit. Can also be repeated:
+                                 --files file1.txt --files file2.txt
+                                 --files "file1.txt file2.txt"
+                               If omitted, no commit is made.
+  --commit-message <msg>       (set only, optional) Git commit message.
+                               If omitted, no commit is made.
+
+Examples:
+  script.ts get --release-branch latest
+  script.ts get --release-branch latest --version-name 1.2.3
+  script.ts get --release-branch releases --version-name v2.0.0
+
+  script.ts set --release-branch latest
+  script.ts push --release-branch latest
+  script.ts set --release-branch latest --files version.txt --commit-message "chore: bump version"
+  script.ts set --release-branch latest --files "dist/a.txt dist/b.txt" --commit-message "chore: release"
+  script.ts set --release-branch latest --files dist/a.txt --files dist/b.txt --commit-message "chore: release"
+'
+`;
