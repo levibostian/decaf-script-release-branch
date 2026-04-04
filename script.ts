@@ -2,216 +2,213 @@ import {
   getLatestReleaseStepInput,
   type GetLatestReleaseStepOutput,
   setLatestReleaseStepOutput,
-  getDeployStepInput
+  getDeployStepInput,
 } from "@levibostian/decaf-sdk";
+import { parseArgs } from "@std/cli/parse-args";
 import $ from "@david/dax";
 
-interface ScriptDataSavedToFile {
-  githubReleaseAssets: string[];
-}
-const getFileToSaveScriptDataTo = (): string => {
-  const tempDir = Deno.env.get("TMPDIR") || Deno.env.get("TMP") || "/tmp";
-    const assetsFilePath = `${tempDir}/decaf-script-github-releases-assets.json`;
-  return assetsFilePath;
-}
+// ============================================================================
+// get command
+//
+// Finds the most recent commit that exists on both the current branch and the
+// configured release branch. This is how we determine what commit was the
+// "base" of the last release, without assuming anything about how tags or
+// GitHub Releases are managed.
+//
+// The versionName of the previous release is passed in via
+// --version-name CLI argument. If it is absent, there
+// is no previous release and the command exits 0 without writing output.
+// ============================================================================
 
-export const getLatestReleaseFromGitHubReleases = async (): Promise<GetLatestReleaseStepOutput | null> => {
+export const getCommonCommitOnReleaseBranch = (
+  releaseBranch: string,
+  previousVersionName: string,
+): GetLatestReleaseStepOutput | null => {
   const input = getLatestReleaseStepInput();
 
-  const latestGitTagCommit = input.gitCommitsCurrentBranch.filter((commit) => commit.tags?.length)[0]
-  if (!latestGitTagCommit) {
-    console.log("No git tags found on the current branch. Therefore, there has never been a release on this branch.");
-    return null
+  const commitsForReleaseBranch = input.gitCommitsAllLocalBranches[releaseBranch] || []
+  const commitsForCurrentBranch = input.gitCommitsCurrentBranch
+
+  const latestCommitOnBothBranches = commitsForReleaseBranch.find((commit) =>
+    commitsForCurrentBranch.some((currentCommit) => currentCommit.sha === commit.sha)
+  )
+
+  if (!latestCommitOnBothBranches) {
+    console.log(`No commits found that are present on both '${releaseBranch}' and current branch.`)
+    console.log("This shouldn't happen, so exiting early with error to avoid creating a broken release.")
+    Deno.exit(1) // No commits found that are present on both branches, exit early without writing output.
   }
 
-  const latestGitTag = latestGitTagCommit!.tags![0];
+  console.log(`Found most recent common commit on both '${releaseBranch}' and current branch: 
+    ${latestCommitOnBothBranches.title} (${latestCommitOnBothBranches.abbreviatedSha})`)
 
-  console.log(`Latest git tag on the current branch is: ${latestGitTag}`);
-
-  const latestReleasesGitHubJsonString = Deno.env.get("MOCK_GITHUB_RELEASES") || await $`gh release list --exclude-drafts --order desc --json name,tagName`.text()
-  const latestReleasesGitHub = JSON.parse(latestReleasesGitHubJsonString) as { name: string; tagName: string }[];
-
-  if (!latestReleasesGitHub.length) {
-    console.log(`No GitHub Releases found in the GitHub repository. Perhaps this is a mistake, since there is a git tag on the current branch but no GitHub Release for that tag? I suggest making a GitHub Release for the git tag, ${latestGitTag}, and then re-running the deployment.`);
-    return null
+  const output: GetLatestReleaseStepOutput = {
+    versionName: previousVersionName,
+    commitSha: latestCommitOnBothBranches.sha,
   }
 
-  const latestRelease = latestReleasesGitHub.find((release) => release.tagName === latestGitTag);
+  return output
+};
 
-  if (!latestRelease) {
-    console.log(`No GitHub Release found for the latest git tag on the current branch, ${latestGitTag}. Perhaps this is a mistake? I suggest making a GitHub Release for the git tag, ${latestGitTag}, and then re-running the deployment.`);
-    return null
-  }
+// ============================================================================
+// set command
+//
+// Checks out the release branch, merges the current branch into it, writes an
+// arbitrary file (caller-specified via --file and --content), commits, pushes,
+// and returns the commit SHA of the new commit on the release branch.
+// ============================================================================
 
-  console.log(
-    `latest release found: ${latestRelease.name} (${latestRelease.tagName})`,
-  );
-
-  const commitMatchingRelease = input.gitCommitsCurrentBranch.find((commit) => {
-    return commit.tags?.includes(latestRelease.tagName);
-  })!;
-
-  console.log(
-    `commit matching release found: ${commitMatchingRelease.title} (${commitMatchingRelease.sha})`,
-  );
-
-  return {
-    versionName: latestRelease.name,
-    commitSha: commitMatchingRelease.sha,
-  }
-}
-
-export const createGitHubRelease = async (customArgs: string[] = []): Promise<void> => {
+export const pushToReleaseBranch = async ({
+  releaseBranch,
+  filesToCommitPaths,
+  commitMessage,
+}: {
+  releaseBranch: string;
+  filesToCommitPaths?: string[];
+  commitMessage?: string;
+}): Promise<{commitSha: string}> => {
   const input = getDeployStepInput();
-  
-  // Get assets from temp file created by set-assets command
-  let githubReleaseAssets: string[] = [];
-  try {
-    const assetsFilePath = getFileToSaveScriptDataTo();
-    const assetsData: ScriptDataSavedToFile = JSON.parse(await Deno.readTextFile(assetsFilePath));
-    githubReleaseAssets = assetsData.githubReleaseAssets || [];
-  } catch {
-    // No temp file or error reading it, continue with empty assets
-  }
-  
-  // Get current branch from input
+
   const currentBranch = input.gitCurrentBranch;
-  
-  let argsToCreateGithubRelease: string[];
-  
-  if (customArgs.length > 0) {
-    // User provided custom arguments, use them directly
-    argsToCreateGithubRelease = [
-      'release',
-      'create',
-      input.nextVersionName,
-      ...customArgs,
-      ...githubReleaseAssets,
-    ];
+
+  // Checkout the release branch and pull the latest commits.
+  await $`git checkout ${releaseBranch}`.printCommand();
+  await $`git pull --no-rebase origin ${releaseBranch}`.printCommand();
+
+  // Merge the current (development) branch into the release branch.
+  // Prefer fast-forward, but allow a merge commit if the histories have
+  // diverged (e.g. after a rebase).
+  await $`git merge --ff ${currentBranch}`.printCommand();
+
+  // Only stage and commit if both files and a commit message were provided.
+  // Do not throw on error because there is a scenario where we previously made this commit but we failed and retried the deployment.
+  // This should only fail if there is no change to commit, which is fine.
+  if (filesToCommitPaths && filesToCommitPaths.length > 0 && commitMessage) {
+    await $`git add ${filesToCommitPaths.join(" ")} && git commit -m "${commitMessage}"`.printCommand().noThrow();
+    console.log("Showing the most recent commit to aid debugging:");
+    await $`git show HEAD`.printCommand();
   } else {
-    // Use default arguments
-    argsToCreateGithubRelease = [
-      'release',
-      'create', 
-      input.nextVersionName,
-      '--generate-notes',
-      '--latest',
-      '--target',
-      currentBranch,
-      ...githubReleaseAssets,
-    ];
+    console.log("No files or commit message provided — skipping commit.");
   }
 
   if (input.testMode) {
-    console.log("Running in test mode, skipping creating GitHub release.");
-    console.log(`Command to create GitHub release: gh ${argsToCreateGithubRelease.join(" ")}`);
+    console.log(
+      "Test mode is enabled — skipping git push.",
+    );
   } else {
-    await $`gh ${argsToCreateGithubRelease}`.printCommand();
-  }
-}
-
-export const setGitHubReleaseAssets = async (assets: string[]): Promise<void> => {  
-  // Verify all asset paths exist
-  for (const asset of assets) {
-    const assetPath = asset.split("#")[0];
-    try {
-      const stat = await Deno.stat(assetPath);
-      if (!stat.isFile) {
-        console.error(`Given asset, ${assetPath}, is not a file. Cannot proceed.`);
-        Deno.exit(1);
-      }
-    } catch {
-      console.error(`Given asset, ${assetPath}, file does not exist. Cannot proceed.`);
-      Deno.exit(1);
-    }
+    await $`git push`.printCommand();
   }
 
-  // Get the temporary directory
-  const assetsFilePath = getFileToSaveScriptDataTo();
-  
-  // Create the assets data
-  const assetsData: ScriptDataSavedToFile = {
-    githubReleaseAssets: assets
+  const commitSha = (await $`git rev-parse HEAD`.text()).trim();
+
+  console.log(`Release branch commit SHA: ${commitSha}`);
+
+  return {
+    commitSha,
   };
-  
-  // Write to temp file
-  try {
-    await Deno.writeTextFile(assetsFilePath, JSON.stringify(assetsData, null, 2));
-    console.log(`GitHub Release assets: ${assets.join(", ")} saved to be referenced later when creating a release.`);
-  } catch (error) {
-    console.error(`Failed to write assets file: ${error instanceof Error ? error.message : String(error)}`);
-    Deno.exit(1);
-  }
-}
+};
+
+// ============================================================================
+// CLI
+// ============================================================================
 
 function showHelp() {
   console.log(`
-Usage: 
-  script.ts get                           # Get the latest release (default behavior)
-  script.ts set [args...]                 # Set/create a GitHub release
-  script.ts set-assets <asset1> [asset2...]  # Set GitHub release assets
-  script.ts get-latest-release            # Alias for 'get'
-  script.ts set-latest-release [args...]  # Alias for 'set'
-  script.ts set-github-release-assets <asset1> [asset2...]  # Alias for 'set-assets'
+Usage:
+  get --release-branch <branch> --version-name <name>
+  set --release-branch <branch> [--files <paths>] [--commit-message <msg>]
 
 Commands:
-  get, get-latest-release                Get the latest GitHub release that matches a git tag on the current branch
-  set, set-latest-release                Create a new GitHub release
-  set-assets, set-github-release-assets  Set GitHub release assets for future release creation
+  get          Find the most recent commit shared between the current branch and the
+               release branch. 
+
+  set | push   Check out the release branch, merge the current branch into it,
+               optionally commit file changes, push, and print the new HEAD commit
+               SHA on the release branch.
+
+Options:
+  --release-branch <branch>    (required) Name of the branch used for releases.
+  --version-name <name>        (get only) Version name of the previous release (e.g. "1.2.3").
+  --files <paths>              (set only, optional) Space-separated file paths to stage
+                               and commit. Can also be repeated:
+                                 --files file1.txt --files file2.txt
+                                 --files "file1.txt file2.txt"
+                               If omitted, no commit is made.
+  --commit-message <msg>       (set only, optional) Git commit message.
+                               If omitted, no commit is made.
 
 Examples:
-  # Get latest release
-  script.ts get
-  script.ts get-latest-release
+  script.ts get --release-branch latest
+  script.ts get --release-branch latest --version-name 1.2.3
+  script.ts get --release-branch releases --version-name v2.0.0
 
-  # Create release with default settings
-  script.ts set
-  script.ts set-latest-release
-
-  # Create release with custom arguments
-  script.ts set --generate-notes --latest --target main
-  script.ts set-latest-release --draft --notes "Custom release notes"
-
-  # Set assets for future release
-  script.ts set-assets "dist/binary-linux#Linux Binary" "dist/binary-mac#Mac Binary"
-  script.ts set-github-release-assets "docs/manual.pdf#User Manual"
+  script.ts set --release-branch latest
+  script.ts push --release-branch latest
+  script.ts set --release-branch latest --files version.txt --commit-message "chore: bump version"
+  script.ts set --release-branch latest --files "dist/a.txt dist/b.txt" --commit-message "chore: release"
+  script.ts set --release-branch latest --files dist/a.txt --files dist/b.txt --commit-message "chore: release"
 `);
 }
 
 if (import.meta.main) {
-  // Check for help flag
-  if (Deno.args.includes("--help") || Deno.args.includes("-h")) {
+  const parsedArgs = parseArgs(Deno.args, {
+    boolean: ["help"],
+    string: ["release-branch", "version-name", "commit-message"],
+    collect: ["files"],
+    alias: { h: "help" },
+  });
+
+  if (parsedArgs.help) {
     showHelp();
     Deno.exit(0);
   }
 
-  const command = Deno.args.length > 0 ? Deno.args[0] : "get";
-  const commandArgs = Deno.args.slice(1);
+  const command = String(parsedArgs._[0] ?? "");
+  if (!command) {
+    console.error("Error: a command is required (get, set, push)");
+    showHelp();
+    Deno.exit(1);
+  }
+
+  const releaseBranch = parsedArgs["release-branch"];
+  if (!releaseBranch) {
+    console.error("Error: --release-branch is required");
+    showHelp();
+    Deno.exit(1);
+  }
 
   switch (command) {
-    case "get":
-    case "get-latest-release": {
-      const latestRelease = await getLatestReleaseFromGitHubReleases();
-      if (latestRelease) {
-        setLatestReleaseStepOutput(latestRelease);
+    case "get": {
+      const versionName = parsedArgs["version-name"];
+
+      if (!versionName) {
+        console.log(
+          `Looks like none of the previous scripts found a latest release. That means there is nothing for me to do, since my job is to find the common commit between the current branch and the release branch.`
+        )
+        Deno.exit(0);
+      }
+
+      const result = getCommonCommitOnReleaseBranch(releaseBranch, versionName);
+      if (result) {
+        setLatestReleaseStepOutput(result);
       }
       break;
     }
     case "set":
-    case "set-latest-release": {
-      await createGitHubRelease(commandArgs);
-      break;
-    }
-    case "set-assets":
-    case "set-github-release-assets": {
-      if (commandArgs.length === 0) {
-        console.error("Error: set-assets command requires at least one asset argument");
-        console.error("Usage: script.ts set-assets <asset1> [asset2...]");
-        console.error("Asset format: path#name (e.g., 'dist/binary#Binary File')");
-        
-        Deno.exit(1);
-      }
-      await setGitHubReleaseAssets(commandArgs);
+    case "push": {
+      // --files can be repeated (collect) giving string[], or a single space-separated value.
+      const rawFiles = (parsedArgs["files"] ?? []) as string[];
+      const filesToCommitPaths = rawFiles
+        .flatMap((f) => f.split(" "))
+        .map((f) => f.trim())
+        .filter(Boolean);
+      const commitMessage = parsedArgs["commit-message"];
+
+      await pushToReleaseBranch({
+        releaseBranch,
+        filesToCommitPaths: filesToCommitPaths.length > 0 ? filesToCommitPaths : undefined,
+        commitMessage,
+      });
       break;
     }
     default: {

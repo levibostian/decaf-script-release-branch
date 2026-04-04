@@ -19,7 +19,7 @@ const argsString = args.length > 0 ? ` ${args.join(' ')}` : '';
 
 // Download and install the binary
 try {
-    execSync(`curl -fsSL https://github.com/levibostian/decaf-script-github-releases/blob/HEAD/install?raw=true | bash -s "${version}" > /dev/null`, {
+    execSync(`curl -fsSL https://github.com/levibostian/decaf-script-release-branch/blob/HEAD/install?raw=true | bash -s "${version}" > /dev/null`, {
         stdio: 'inherit',
         cwd: process.cwd()
     });
@@ -29,7 +29,7 @@ try {
 }
 
 // Run the binary with arguments
-const binaryPath = './decaf-script-github-releases';
+const binaryPath = './decaf-script-release-branch';
 try {
     execSync(`${binaryPath}${argsString}`, {
         stdio: 'inherit',

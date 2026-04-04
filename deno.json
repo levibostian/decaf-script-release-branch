@@ -1,5 +1,5 @@
 {
-  "name": "@levibostian/decaf-script-github-releases",
+  "name": "@levibostian/decaf-script-release-branch",
   "license": "MIT",
   "exports": {
     ".": "./script.ts"
@@ -14,10 +14,13 @@
     ]
   },
   "imports": {
-    "@levibostian/decaf-sdk": "jsr:@levibostian/decaf-sdk@0.2.1",
+    "@levibostian/decaf-sdk": "jsr:@levibostian/decaf-sdk@0.7.0",
     "@david/dax": "jsr:@david/dax@0.43.2",
+    "@levibostian/mock-a-bin": "jsr:@levibostian/mock-a-bin@^1.1.0",
     "@std/assert": "jsr:@std/assert@1.0.14",
-    "@std/semver": "jsr:@std/semver@1"
+    "@std/cli": "jsr:@std/cli@^1.0.28",
+    "@std/testing": "jsr:@std/testing@^1.0.17",
+    "@std/testing/snapshot": "jsr:@std/testing@^1.0.17/snapshot"
   },
   "tasks": {
     "test": "deno test --allow-all --junit-path reports/junit.xml --coverage=reports/coverage/",
