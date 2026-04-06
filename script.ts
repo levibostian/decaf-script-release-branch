@@ -62,10 +62,12 @@ export const pushToReleaseBranch = async ({
   releaseBranch,
   filesToCommitPaths,
   commitMessage,
+  disableGitAddForce = false,
 }: {
   releaseBranch: string;
   filesToCommitPaths?: string[];
   commitMessage?: string;
+  disableGitAddForce?: boolean;
 }): Promise<{commitSha: string}> => {
   const input = getDeployStepInput();
 
@@ -84,7 +86,9 @@ export const pushToReleaseBranch = async ({
   // Do not throw on error because there is a scenario where we previously made this commit but we failed and retried the deployment.
   // This should only fail if there is no change to commit, which is fine.
   if (filesToCommitPaths && filesToCommitPaths.length > 0 && commitMessage) {
-    await $`git add ${filesToCommitPaths.join(" ")} && git commit -m "${commitMessage}"`.printCommand().noThrow();
+    const gitAddArgs = disableGitAddForce ? filesToCommitPaths : ["-f", ...filesToCommitPaths];
+    await $`git add ${gitAddArgs}`.printCommand().noThrow();
+    await $`git commit -m ${commitMessage}`.printCommand().noThrow();
     console.log("Showing the most recent commit to aid debugging:");
     await $`git show HEAD`.printCommand();
   } else {
@@ -136,6 +140,8 @@ Options:
                                If omitted, no commit is made.
   --commit-message <msg>       (set only, optional) Git commit message.
                                If omitted, no commit is made.
+  --disable-git-add-force      (set only, optional) Disable the default -f flag
+                               passed to git add.
 
 Examples:
   script.ts get --release-branch latest
@@ -152,7 +158,7 @@ Examples:
 
 if (import.meta.main) {
   const parsedArgs = parseArgs(Deno.args, {
-    boolean: ["help"],
+    boolean: ["help", "disable-git-add-force"],
     string: ["release-branch", "version-name", "commit-message"],
     collect: ["files"],
     alias: { h: "help" },
@@ -208,6 +214,7 @@ if (import.meta.main) {
         releaseBranch,
         filesToCommitPaths: filesToCommitPaths.length > 0 ? filesToCommitPaths : undefined,
         commitMessage,
+        disableGitAddForce: parsedArgs["disable-git-add-force"],
       });
       break;
     }

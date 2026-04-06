@@ -25,6 +25,8 @@ Options:
                                If omitted, no commit is made.
   --commit-message <msg>       (set only, optional) Git commit message.
                                If omitted, no commit is made.
+  --disable-git-add-force      (set only, optional) Disable the default -f flag
+                               passed to git add.
 
 Examples:
   script.ts get --release-branch latest
@@ -81,6 +83,8 @@ Options:
                                If omitted, no commit is made.
   --commit-message <msg>       (set only, optional) Git commit message.
                                If omitted, no commit is made.
+  --disable-git-add-force      (set only, optional) Disable the default -f flag
+                               passed to git add.
 
 Examples:
   script.ts get --release-branch latest
@@ -120,6 +124,8 @@ Options:
                                If omitted, no commit is made.
   --commit-message <msg>       (set only, optional) Git commit message.
                                If omitted, no commit is made.
+  --disable-git-add-force      (set only, optional) Disable the default -f flag
+                               passed to git add.
 
 Examples:
   script.ts get --release-branch latest
@@ -159,6 +165,8 @@ Options:
                                If omitted, no commit is made.
   --commit-message <msg>       (set only, optional) Git commit message.
                                If omitted, no commit is made.
+  --disable-git-add-force      (set only, optional) Disable the default -f flag
+                               passed to git add.
 
 Examples:
   script.ts get --release-branch latest
@@ -186,20 +194,21 @@ Release branch commit SHA: firedragon1234567890abcdef"
 `;
 
 snapshot[`set: with --files and --commit-message stages and commits them 1`] = `
-\`> git checkout latest
+"> git checkout latest
 git checkout latest (mocked)
 > git pull --no-rebase origin latest
 git pull --no-rebase origin latest (mocked)
 > git merge --ff main
 git merge --ff main (mocked)
-> git add 'version.txt' && git commit -m "'chore: bump version'"
-git add version.txt (mocked)
-git commit -m 'chore: bump version' (mocked)
+> git add '-f' 'version.txt'
+git add -f version.txt (mocked)
+> git commit -m 'chore: bump version'
+git commit -m chore: bump version (mocked)
 Showing the most recent commit to aid debugging:
 > git show HEAD
 git show HEAD (mocked)
 Test mode is enabled — skipping git push.
-Release branch commit SHA: cafe12345678\`
+Release branch commit SHA: cafe12345678"
 `;
 
 snapshot[`set: only commit-message provided but no files → skips commit 1`] = `
@@ -215,37 +224,39 @@ Release branch commit SHA: aabb1122ccdd3344"
 `;
 
 snapshot[`set: multiple files via space-separated single --files arg 1`] = `
-\`> git checkout latest
+"> git checkout latest
 git checkout latest (mocked)
 > git pull --no-rebase origin latest
 git pull --no-rebase origin latest (mocked)
 > git merge --ff main
 git merge --ff main (mocked)
-> git add 'dist/a.txt dist/b.txt' && git commit -m "'chore: release'"
-git add dist/a.txt dist/b.txt (mocked)
-git commit -m 'chore: release' (mocked)
+> git add '-f' 'dist/a.txt' 'dist/b.txt'
+git add -f dist/a.txt dist/b.txt (mocked)
+> git commit -m 'chore: release'
+git commit -m chore: release (mocked)
 Showing the most recent commit to aid debugging:
 > git show HEAD
 git show HEAD (mocked)
 Test mode is enabled — skipping git push.
-Release branch commit SHA: 11aabb22ccdd3344\`
+Release branch commit SHA: 11aabb22ccdd3344"
 `;
 
 snapshot[`set: multiple files via repeated --files flag 1`] = `
-\`> git checkout latest
+"> git checkout latest
 git checkout latest (mocked)
 > git pull --no-rebase origin latest
 git pull --no-rebase origin latest (mocked)
 > git merge --ff main
 git merge --ff main (mocked)
-> git add 'dist/a.txt dist/b.txt' && git commit -m "'chore: release'"
-git add dist/a.txt dist/b.txt (mocked)
-git commit -m 'chore: release' (mocked)
+> git add '-f' 'dist/a.txt' 'dist/b.txt'
+git add -f dist/a.txt dist/b.txt (mocked)
+> git commit -m 'chore: release'
+git commit -m chore: release (mocked)
 Showing the most recent commit to aid debugging:
 > git show HEAD
 git show HEAD (mocked)
 Test mode is enabled — skipping git push.
-Release branch commit SHA: cc11dd22ee334455\`
+Release branch commit SHA: cc11dd22ee334455"
 `;
 
 snapshot[`set: git push runs when testMode is false 1`] = `
@@ -257,7 +268,7 @@ git pull --no-rebase origin latest (mocked)
 git merge --ff main (mocked)
 No files or commit message provided — skipping commit.
 > git push
-git push (mocked passthrough)
+git push (mocked)
 Release branch commit SHA: 0011223344556677"
 `;
 
@@ -296,6 +307,8 @@ Options:
                                If omitted, no commit is made.
   --commit-message <msg>       (set only, optional) Git commit message.
                                If omitted, no commit is made.
+  --disable-git-add-force      (set only, optional) Disable the default -f flag
+                               passed to git add.
 
 Examples:
   script.ts get --release-branch latest
