@@ -32,28 +32,37 @@ function commit(sha: string, title: string): GitCommit {
 
 // Mock git to succeed for all operations that pushToReleaseBranch runs.
 // git rev-parse HEAD returns the given sha.
-async function mockGit(headSha: string): Promise<MockBinCleanup> {
-  return await mockBin(
+// Each invocation is appended to logFile as a single line ("git <arg1> <arg2> ...")
+// so tests can assert on the exact commands that were run.
+async function mockGit(headSha: string, logFile: string): Promise<{ cleanup: MockBinCleanup; readCommands: () => string[] }> {
+  const cleanup = await mockBin(
     "git",
     "bash",
     `
-subcmd="$1"
-case "$subcmd" in
-  checkout|pull|merge|add|commit|show)
-    echo "git $@ (mocked)"
-    exit 0
-    ;;
+# Record the full invocation as "git <arg1> <arg2> ..." on a single line
+echo "git $*" >> "${logFile}"
+
+case "$1" in
   rev-parse)
     echo "${headSha}"
-    exit 0
     ;;
   *)
-    echo "git $@ (mocked passthrough)"
-    exit 0
+    echo "git $* (mocked)"
     ;;
 esac
 `,
   )
+
+  const readCommands = (): string[] => {
+    try {
+      const text = Deno.readTextFileSync(logFile)
+      return text.trim().split("\n").filter(Boolean)
+    } catch {
+      return []
+    }
+  }
+
+  return { cleanup, readCommands }
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +228,8 @@ Deno.test("push alias: missing --release-branch exits 1 with error", async (t) =
 });
 
 Deno.test("set: merges and pushes to release branch, returns commit SHA", async (t) => {
-  const cleanup = await mockGit("firedragon1234567890abcdef")
+  const logFile = await Deno.makeTempFile()
+  const { cleanup, readCommands } = await mockGit("firedragon1234567890abcdef", logFile)
   try {
     const input: DeployStepInput = {
       gitCurrentBranch: "main",
@@ -233,18 +243,18 @@ Deno.test("set: merges and pushes to release branch, returns commit SHA", async 
     );
 
     assertEquals(code, 0);
-    // Should have checked out the release branch
-    assertArrayIncludes(stdout, ["git checkout latest (mocked)"]);
-    // Should have merged the current branch
-    assertArrayIncludes(stdout, ["git merge --ff main (mocked)"]);
-    // Should print the returned SHA
     assertArrayIncludes(stdout, ["Release branch commit SHA: firedragon1234567890abcdef"]);
-    // Should skip push in test mode
     assertArrayIncludes(stdout, ["Test mode is enabled — skipping git push."]);
 
-    // Assert we do not add or commit any files since we didn't provide any
-    assertEquals(stdout.some((line: string) => line.includes("git add")), false);
-    assertEquals(stdout.some((line: string) => line.includes("git commit")), false);
+    // Assert exact git commands in order    
+    // Note: should not have any git add or commit commands since no --files or --commit-message provided    
+    assertEquals(readCommands(), [
+      "git checkout latest",
+      "git pull --no-rebase origin latest",
+      "git merge --ff main",
+      "git rev-parse HEAD",
+    ])
+
     await assertSnapshot(t, stdout.join("\n"));
   } finally {
     cleanup()
@@ -252,7 +262,8 @@ Deno.test("set: merges and pushes to release branch, returns commit SHA", async 
 });
 
 Deno.test("set: with --files and --commit-message stages and commits them", async (t) => {
-  const cleanup = await mockGit("cafe12345678")
+  const logFile = await Deno.makeTempFile()
+  const { cleanup, readCommands } = await mockGit("cafe12345678", logFile)
   try {
     const input: DeployStepInput = {
       gitCurrentBranch: "main",
@@ -266,10 +277,19 @@ Deno.test("set: with --files and --commit-message stages and commits them", asyn
     );
 
     assertEquals(code, 0);
-    // Should have staged the file and committed (dax splits && into separate git invocations)
-    assertArrayIncludes(stdout, ["git add version.txt (mocked)"]);
-    assertArrayIncludes(stdout, [`git commit -m 'chore: bump version' (mocked)`]);
     assertArrayIncludes(stdout, ["Release branch commit SHA: cafe12345678"]);
+
+    // Assert exact git commands in order
+    assertEquals(readCommands(), [
+      "git checkout latest", 
+      "git pull --no-rebase origin latest",
+      "git merge --ff main",
+      "git add -f version.txt",
+      "git commit -m chore: bump version",
+      "git show HEAD",
+      "git rev-parse HEAD",
+    ])
+
     await assertSnapshot(t, stdout.join("\n"));
   } finally {
     cleanup()
@@ -277,7 +297,8 @@ Deno.test("set: with --files and --commit-message stages and commits them", asyn
 });
 
 Deno.test("set: only commit-message provided but no files → skips commit", async (t) => {
-  const cleanup = await mockGit("aabb1122ccdd3344")
+  const logFile = await Deno.makeTempFile()
+  const { cleanup, readCommands } = await mockGit("aabb1122ccdd3344", logFile)
   try {
     const input: DeployStepInput = {
       gitCurrentBranch: "main",
@@ -294,6 +315,15 @@ Deno.test("set: only commit-message provided but no files → skips commit", asy
     // No files provided → commit is skipped even though commit-message is given
     assertArrayIncludes(stdout, ["No files or commit message provided — skipping commit."]);
     assertArrayIncludes(stdout, ["Release branch commit SHA: aabb1122ccdd3344"]);
+
+    // Assert no git add or commit was run
+    assertEquals(readCommands(), [
+      "git checkout latest",
+      "git pull --no-rebase origin latest",
+      "git merge --ff main",
+      "git rev-parse HEAD",
+    ])
+
     await assertSnapshot(t, stdout.join("\n"));
   } finally {
     cleanup()
@@ -301,7 +331,8 @@ Deno.test("set: only commit-message provided but no files → skips commit", asy
 });
 
 Deno.test("set: multiple files via space-separated single --files arg", async (t) => {
-  const cleanup = await mockGit("11aabb22ccdd3344")
+  const logFile = await Deno.makeTempFile()
+  const { cleanup, readCommands } = await mockGit("11aabb22ccdd3344", logFile)
   try {
     const input: DeployStepInput = {
       gitCurrentBranch: "main",
@@ -315,9 +346,19 @@ Deno.test("set: multiple files via space-separated single --files arg", async (t
     );
 
     assertEquals(code, 0);
-    // Both files should be staged in one git add call
-    assertArrayIncludes(stdout, ["git add dist/a.txt dist/b.txt (mocked)"]);
     assertArrayIncludes(stdout, ["Release branch commit SHA: 11aabb22ccdd3344"]);
+
+    // Both files should be separate args in a single git add call
+    assertEquals(readCommands(), [
+      "git checkout latest",
+      "git pull --no-rebase origin latest",
+      "git merge --ff main",
+      "git add -f dist/a.txt dist/b.txt",
+      "git commit -m chore: release",
+      "git show HEAD",
+      "git rev-parse HEAD",
+    ])
+
     await assertSnapshot(t, stdout.join("\n"));
   } finally {
     cleanup()
@@ -325,7 +366,8 @@ Deno.test("set: multiple files via space-separated single --files arg", async (t
 });
 
 Deno.test("set: multiple files via repeated --files flag", async (t) => {
-  const cleanup = await mockGit("cc11dd22ee334455")
+  const logFile = await Deno.makeTempFile()
+  const { cleanup, readCommands } = await mockGit("cc11dd22ee334455", logFile)
   try {
     const input: DeployStepInput = {
       gitCurrentBranch: "main",
@@ -339,9 +381,19 @@ Deno.test("set: multiple files via repeated --files flag", async (t) => {
     );
 
     assertEquals(code, 0);
-    // Both files should be staged together
-    assertArrayIncludes(stdout, ["git add dist/a.txt dist/b.txt (mocked)"]);
     assertArrayIncludes(stdout, ["Release branch commit SHA: cc11dd22ee334455"]);
+
+    // Both files should be separate args in a single git add call
+    assertEquals(readCommands(), [
+      "git checkout latest",
+      "git pull --no-rebase origin latest",
+      "git merge --ff main",
+      "git add -f dist/a.txt dist/b.txt",
+      "git commit -m chore: release",
+      "git show HEAD",
+      "git rev-parse HEAD",
+    ])
+
     await assertSnapshot(t, stdout.join("\n"));
   } finally {
     cleanup()
@@ -349,7 +401,8 @@ Deno.test("set: multiple files via repeated --files flag", async (t) => {
 });
 
 Deno.test("set: git push runs when testMode is false", async (t) => {
-  const cleanup = await mockGit("0011223344556677")
+  const logFile = await Deno.makeTempFile()
+  const { cleanup, readCommands } = await mockGit("0011223344556677", logFile)
   try {
     const input: DeployStepInput = {
       gitCurrentBranch: "main",
@@ -366,8 +419,16 @@ Deno.test("set: git push runs when testMode is false", async (t) => {
     // Should NOT see the "skipping" message
     const hasSkipMessage = stdout.some((line: string) => line.includes("skipping git push"));
     assertEquals(hasSkipMessage, false);
-    // Should see the git push command was invoked
-    assertArrayIncludes(stdout, ["git push (mocked passthrough)"]);
+
+    // Assert git push was run as its own command
+    assertEquals(readCommands(), [
+      "git checkout latest",
+      "git pull --no-rebase origin latest",
+      "git merge --ff main",
+      "git push",
+      "git rev-parse HEAD",
+    ])
+
     await assertSnapshot(t, stdout.join("\n"));
   } finally {
     cleanup()

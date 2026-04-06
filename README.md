@@ -155,6 +155,7 @@ npx @levibostian/decaf-script-release-branch set \
 | `--release-branch` | Yes | The name of the branch where releases live. |
 | `--files` | No | File path(s) to stage and commit. Space-separated or repeated. If omitted, no commit is made. |
 | `--commit-message` | No | The git commit message. If omitted, no commit is made. |
+| `--disable-git-add-force` | No | By default, `git add -f` is used to stage files (so ignored files can be committed). Pass this flag to use plain `git add` instead. |
 
 **Output**: The SHA of the HEAD commit on the release branch after the push is printed to stdout.
 
