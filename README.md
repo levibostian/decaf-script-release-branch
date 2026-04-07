@@ -157,14 +157,14 @@ npx @levibostian/decaf-script-release-branch set \
 | `--commit-message` | No | The git commit message. If omitted, no commit is made. |
 | `--disable-git-add-force` | No | By default, `git add -f` is used to stage files (so ignored files can be committed). Pass this flag to use plain `git add` instead. |
 
-**Output**: The SHA of the HEAD commit on the release branch after the push is printed to stdout.
+### Output
 
-If a later script needs this SHA (e.g. to create a git tag or GitHub Release on the release branch), capture it from stdout and pass it as a command-line argument. For example:
+`set` / `push` creates new commits that you may need to reference as part of your deployment process.
 
-```txt
-... first, run the set/push command and capture the SHA:
-RELEASE_SHA=$(npx @levibostian/decaf-script-release-branch set --release-branch latest --files version.txt --commit-message "chore: bump version to {{ nextVersionName }}" | grep "Release branch commit SHA:" | awk '{print $NF}')
-... then pass it to the next script:
+If a later script needs the latest commit on the release branch, use the **`latest-commit`** command. It prints the raw SHA to stdout, making it easy to capture:
+
+```bash
+RELEASE_SHA=$(npx @levibostian/decaf-script-release-branch latest-commit --release-branch latest)
 npx @levibostian/decaf-script-github-releases create --tag {{ nextVersionName }} --target "$RELEASE_SHA" --name "Release {{ nextVersionName }}"
 ```
 

@@ -493,6 +493,35 @@ Deno.test("get: error message includes the release branch name", async (t) => {
 });
 
 // ---------------------------------------------------------------------------
+// latest-commit command tests
+// ---------------------------------------------------------------------------
+
+Deno.test("latest-commit: prints only the raw commit SHA — no extra whitespace or content", async (t) => {
+  const logFile = await Deno.makeTempFile()
+  const sha = "deadbeef1234567890abcdef12345678deadbeef"
+  const { cleanup } = await mockGit(sha, logFile)
+  try {
+    const input: DeployStepInput = {
+      gitCurrentBranch: "main",
+      nextVersionName: "1.0.0",
+      testMode: true,
+    } as unknown as DeployStepInput;
+
+    const { code, stdout } = await runDeployScript(
+      "deno run --allow-all script.ts latest-commit --release-branch latest",
+      input,
+    );
+
+    assertEquals(code, 0);
+    // Exactly one line, and that line is the bare SHA with no surrounding whitespace
+    assertEquals(stdout.length, 1);
+    assertEquals(stdout[0], "deadbeef1234567890abcdef12345678deadbeef");
+  } finally {
+    cleanup()
+  }
+});
+
+// ---------------------------------------------------------------------------
 // CLI edge cases
 // ---------------------------------------------------------------------------
 
