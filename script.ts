@@ -113,6 +113,20 @@ export const pushToReleaseBranch = async ({
 };
 
 // ============================================================================
+// latest-commit command
+//
+// Prints the latest commit SHA on the release branch to stdout.
+// ============================================================================
+
+export const getLatestCommitOnReleaseBranch = async (
+  releaseBranch: string,
+): Promise<string> => {
+  const commitSha = (await $`git rev-parse ${releaseBranch}`.text()).trim();
+  console.log(commitSha);
+  return commitSha;
+};
+
+// ============================================================================
 // CLI
 // ============================================================================
 
@@ -121,6 +135,7 @@ function showHelp() {
 Usage:
   get --release-branch <branch> --version-name <name>
   set --release-branch <branch> [--files <paths>] [--commit-message <msg>]
+  latest-commit --release-branch <branch>
 
 Commands:
   get          Find the most recent commit shared between the current branch and the
@@ -129,6 +144,7 @@ Commands:
   set | push   Check out the release branch, merge the current branch into it,
                optionally commit file changes, push, and print the new HEAD commit
                SHA on the release branch.
+  latest-commit   Print the latest commit SHA on the release branch to stdout.
 
 Options:
   --release-branch <branch>    (required) Name of the branch used for releases.
@@ -153,6 +169,8 @@ Examples:
   script.ts set --release-branch latest --files version.txt --commit-message "chore: bump version"
   script.ts set --release-branch latest --files "dist/a.txt dist/b.txt" --commit-message "chore: release"
   script.ts set --release-branch latest --files dist/a.txt --files dist/b.txt --commit-message "chore: release"
+
+  script.ts latest-commit --release-branch latest
 `);
 }
 
@@ -216,6 +234,10 @@ if (import.meta.main) {
         commitMessage,
         disableGitAddForce: parsedArgs["disable-git-add-force"],
       });
+      break;
+    }
+    case "latest-commit": {
+      await getLatestCommitOnReleaseBranch(releaseBranch);
       break;
     }
     default: {
