@@ -29,7 +29,7 @@ try {
 }
 
 // Run the binary with arguments
-const binaryPath = './decaf-script-release-branch';
+const binaryPath = 'decaf-script-release-branch';
 try {
     execSync(`${binaryPath}${argsString}`, {
         stdio: 'inherit',
