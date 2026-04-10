@@ -79,9 +79,9 @@ deploy: deno run --allow-all --quiet jsr:@levibostian/decaf-script-release-branc
 ```yaml
 get_latest_release_current_branch: |
   curl -fsSL https://github.com/levibostian/decaf-script-release-branch/blob/HEAD/install?raw=true | bash -s "0.1.0"
-  ./decaf-script-release-branch get --release-branch latest --version-name "{{ versionName }}"
+  decaf-script-release-branch get --release-branch latest --version-name "{{ versionName }}"
 deploy: |
-  ./decaf-script-release-branch set --release-branch latest --files version.txt --commit-message "chore: bump version to {{ nextVersionName }}"
+  decaf-script-release-branch set --release-branch latest --files version.txt --commit-message "chore: bump version to {{ nextVersionName }}"
 ```
 
 # Commands

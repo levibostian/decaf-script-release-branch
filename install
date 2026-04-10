@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="levibostian/decaf-script-github-releases"
-BINARY_NAME="decaf-script-github-releases"
+REPO="levibostian/decaf-script-release-branch"
+BINARY_NAME="decaf-script-release-branch"
 
 echo "Fetching latest release version from GitHub..."
 LATEST=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
@@ -23,7 +23,13 @@ echo "Installing version: $VERSION - $OS - $ARCH..."
 
 # Download release binary for the specified version
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/$BINARY_FILE"
-DEST="./$BINARY_NAME"
+
+# Install to ~/.local/bin (standard location for user binaries)
+INSTALL_DIR="${HOME}/.local/bin"
+DEST="${INSTALL_DIR}/${BINARY_NAME}"
+
+# Create installation directory if it doesn't exist
+mkdir -p "$INSTALL_DIR"
 
 if ! curl -fsSL "$DOWNLOAD_URL" -o "$DEST"; then
     echo "\nNo binary found for OS '$OS' and architecture '$ARCH'." >&2
@@ -32,5 +38,4 @@ if ! curl -fsSL "$DOWNLOAD_URL" -o "$DEST"; then
 fi
 chmod +x "$DEST"
 
-echo "Install complete! Run the tool with:"
-echo "  ./decaf-script-github-releases [args]"
+echo "Install complete! Binary installed to: $DEST"
